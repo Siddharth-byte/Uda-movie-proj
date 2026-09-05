@@ -10,6 +10,7 @@ on:
   workflow_dispatch:
 
 jobs:
+
   lint:
     name: Frontend Lint
     runs-on: ubuntu-latest
