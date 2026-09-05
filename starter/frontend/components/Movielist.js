@@ -29,11 +29,7 @@ export default function MovieList({ onMovieClick }) {
   return (
     <div>
       {movies.map((movie) => (
-        <button
-          key={movie.id}
-          type="button"
-          onClick={() => onMovieClick(movie)}
-        >
+        <button key={movie.id} type="button" onClick={() => onMovieClick(movie)}>
           {movie.title}
         </button>
       ))}
