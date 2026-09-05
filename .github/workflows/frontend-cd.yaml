@@ -3,9 +3,11 @@ name: Frontend Continuous Deployment
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'starter/frontend/**'
+      - 'starter/frontend/k8s/**'
+      - '.github/workflows/frontend-cd.yaml'
 
   workflow_dispatch:
 
@@ -20,23 +22,15 @@ jobs:
         working-directory: starter/frontend
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup NodeJS
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version-file: starter/frontend/.nvmrc
           cache: npm
           cache-dependency-path: starter/frontend/package-lock.json
-
-      - name: Cache npm
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('starter/frontend/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
 
       - name: Install dependencies
         run: npm ci
@@ -54,29 +48,21 @@ jobs:
         working-directory: starter/frontend
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup NodeJS
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version-file: starter/frontend/.nvmrc
           cache: npm
           cache-dependency-path: starter/frontend/package-lock.json
 
-      - name: Cache npm
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('starter/frontend/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
       - name: Install dependencies
         run: npm ci
 
       - name: Run tests
-        run: npm test -- --watchAll=false --passWithNoTests
+        run: npm run test -- --watchAll=false --passWithNoTests
 
 
   build-and-deploy:
@@ -88,7 +74,8 @@ jobs:
       - test
 
     steps:
-      - name: Checkout code
+
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials
@@ -96,25 +83,56 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Configure kubectl for EKS
+        run: |
+          aws eks update-kubeconfig \
+            --region "${{ secrets.AWS_REGION }}" \
+            --name "${{ secrets.EKS_CLUSTER_NAME }}"
+
+      - name: Get backend LoadBalancer URL
+        id: backend
+        run: |
+          echo "Waiting for backend LoadBalancer..."
+
+          for i in {1..30}; do
+            BACKEND_HOST=$(kubectl get service backend \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+
+            if [ -n "$BACKEND_HOST" ]; then
+              echo "Backend LoadBalancer: $BACKEND_HOST"
+              echo "url=http://$BACKEND_HOST" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "Backend LoadBalancer not ready yet..."
+            sleep 10
+          done
+
+          echo "ERROR: Backend LoadBalancer hostname was not created."
+          kubectl get service backend
+          exit 1
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build frontend Docker image
-        working-directory: starter/frontend
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: frontend
           IMAGE_TAG: ${{ github.sha }}
-          REACT_APP_MOVIE_API_URL: http://localhost:5000
+          REACT_APP_MOVIE_API_URL: ${{ steps.backend.outputs.url }}
         run: |
+          echo "Building frontend with backend URL:"
+          echo "$REACT_APP_MOVIE_API_URL"
+
           docker build \
-            --build-arg REACT_APP_MOVIE_API_URL=$REACT_APP_MOVIE_API_URL \
-            --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            .
+            --build-arg REACT_APP_MOVIE_API_URL="$REACT_APP_MOVIE_API_URL" \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            starter/frontend
 
       - name: Push frontend image to ECR
         env:
@@ -122,23 +140,24 @@ jobs:
           ECR_REPOSITORY: frontend
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-
-      - name: Configure kubectl
-        run: |
-          aws eks update-kubeconfig \
-            --region ${{ secrets.AWS_REGION }} \
-            --name ${{ secrets.EKS_CLUSTER_NAME }}
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
       - name: Deploy frontend to EKS
-        working-directory: starter/frontend/k8s
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          kustomize edit set image frontend=$ECR_REGISTRY/frontend:$IMAGE_TAG
-          kustomize build | kubectl apply -f -
+          cd starter/frontend/k8s
+
+          kustomize edit set image \
+            frontend="$ECR_REGISTRY/frontend:$IMAGE_TAG"
+
+          kustomize build . | kubectl apply -f -
 
       - name: Verify frontend deployment
         run: |
           kubectl rollout status deployment/frontend --timeout=180s
+
+      - name: Show frontend service
+        run: |
+          kubectl get service frontend
