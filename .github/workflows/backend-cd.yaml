@@ -6,6 +6,7 @@ on:
       - master
     paths:
       - 'starter/backend/**'
+
   workflow_dispatch:
 
 jobs:
@@ -73,8 +74,10 @@ jobs:
       - test
 
     steps:
+
       - name: Checkout code
         uses: actions/checkout@v4
+
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -82,10 +85,13 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN}}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+
 
       - name: Build backend Docker image
         working-directory: starter/backend
@@ -98,6 +104,7 @@ jobs:
             --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
             .
 
+
       - name: Push backend image to ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -106,11 +113,13 @@ jobs:
         run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
+
       - name: Configure kubectl
         run: |
           aws eks update-kubeconfig \
             --region ${{ secrets.AWS_REGION }} \
             --name ${{ secrets.EKS_CLUSTER_NAME }}
+
 
       - name: Deploy backend to EKS
         working-directory: starter/backend/k8s
@@ -121,21 +130,34 @@ jobs:
           kustomize edit set image backend=$ECR_REGISTRY/backend:$IMAGE_TAG
           kustomize build | kubectl apply -f -
 
+
+      - name: Show backend deployment
+        if: always()
+        run: |
+          echo "=== Backend Deployment ==="
+          kubectl get deployment backend -o wide
+
+          echo "=== Backend ReplicaSets ==="
+          kubectl get replicasets -o wide
+
+          echo "=== Backend Pods ==="
+          kubectl get pods -o wide
+
+          echo "=== Pod Status ==="
+          kubectl get pods -l app=backend \
+            -o custom-columns=NAME:.metadata.name,STATUS:.status.phase,READY:.status.containerStatuses[*].ready,IMAGE:.spec.containers[*].image,NODE:.spec.nodeName
+
+          echo "=== Recent Events ==="
+          kubectl get events --sort-by=.lastTimestamp | tail -30
+
+
+      - name: Show backend logs
+        if: always()
+        run: |
+          echo "=== Backend Logs ==="
+          kubectl logs -l app=backend --tail=100 --all-containers=true --ignore-errors=true || true
+
+
       - name: Verify backend deployment
         run: |
           kubectl rollout status deployment/backend --timeout=180s
-
-      - name: Show backend diagnostics
-        if: always()
-        run: |
-          echo "=== Deployments ==="
-          kubectl get deployment backend -o wide
-
-          echo "=== Pods ==="
-          kubectl get pods -o wide
-
-          echo "=== Backend pod description ==="
-          kubectl describe pods -l app=backend
-
-          echo "=== Backend logs ==="
-          kubectl logs -l app=backend --tail=100 --all-containers=true
