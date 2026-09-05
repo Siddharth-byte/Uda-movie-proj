@@ -3,7 +3,7 @@ name: Frontend Continuous Deployment
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - 'starter/frontend/**'
 
@@ -30,11 +30,20 @@ jobs:
           cache: npm
           cache-dependency-path: starter/frontend/package-lock.json
 
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('starter/frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Install dependencies
         run: npm ci
 
       - name: Run lint
         run: npm run lint
+
 
   test:
     name: Frontend Tests
@@ -55,11 +64,20 @@ jobs:
           cache: npm
           cache-dependency-path: starter/frontend/package-lock.json
 
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('starter/frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Install dependencies
         run: npm ci
 
       - name: Run tests
         run: npm test -- --watchAll=false --passWithNoTests
+
 
   build-and-deploy:
     name: Build and Deploy Frontend
@@ -122,30 +140,5 @@ jobs:
           kustomize build | kubectl apply -f -
 
       - name: Verify frontend deployment
-        continue-on-error: true
         run: |
           kubectl rollout status deployment/frontend --timeout=180s
-
-      - name: Show frontend deployment status
-        if: always()
-        run: |
-          echo "===== FRONTEND DEPLOYMENT ====="
-          kubectl get deployment frontend -o wide || true
-
-          echo "===== FRONTEND REPLICASETS ====="
-          kubectl get replicasets -l app=frontend -o wide || true
-
-          echo "===== FRONTEND PODS ====="
-          kubectl get pods -l app=frontend -o wide || true
-
-          echo "===== FRONTEND SERVICES ====="
-          kubectl get services -l app=frontend || true
-
-          echo "===== KUBERNETES EVENTS ====="
-          kubectl get events --sort-by=.lastTimestamp | tail -30 || true
-
-          echo "===== FRONTEND LOGS ====="
-          kubectl logs -l app=frontend \
-            --tail=100 \
-            --all-containers=true \
-            --ignore-errors=true || true
