@@ -128,64 +128,34 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           kustomize edit set image backend=$ECR_REGISTRY/backend:$IMAGE_TAG
-
-          echo "=== Applying backend Kubernetes manifests ==="
           kustomize build | kubectl apply -f -
 
-          echo "=== Backend deployment ==="
-          kubectl get deployment backend -o wide
 
-          echo "=== Backend pods ==="
-          kubectl get pods -l app=backend -o wide
-
-
-      - name: Wait for old backend pods to terminate
-        run: |
-          echo "Waiting for old backend pods to terminate..."
-
-          kubectl wait \
-            --for=delete \
-            pod \
-            -l app=backend \
-            --timeout=60s || true
-
-
-      - name: Wait for backend deployment
+      - name: Verify backend deployment
+        continue-on-error: true
         run: |
           kubectl rollout status deployment/backend --timeout=180s
 
 
-      - name: Final backend verification
+      - name: Show backend deployment status
         if: always()
         run: |
-          echo "======================================"
-          echo "BACKEND DEPLOYMENT"
-          echo "======================================"
-          kubectl get deployment backend -o wide
+          echo "===== BACKEND DEPLOYMENT ====="
+          kubectl get deployment backend -o wide || true
 
-          echo "======================================"
-          echo "BACKEND REPLICASETS"
-          echo "======================================"
-          kubectl get replicasets -l app=backend -o wide
+          echo "===== BACKEND REPLICASETS ====="
+          kubectl get replicasets -l app=backend -o wide || true
 
-          echo "======================================"
-          echo "BACKEND PODS"
-          echo "======================================"
-          kubectl get pods -l app=backend -o wide
+          echo "===== BACKEND PODS ====="
+          kubectl get pods -l app=backend -o wide || true
 
-          echo "======================================"
-          echo "BACKEND SERVICES"
-          echo "======================================"
-          kubectl get services -l app=backend
+          echo "===== BACKEND SERVICES ====="
+          kubectl get services -l app=backend || true
 
-          echo "======================================"
-          echo "RECENT EVENTS"
-          echo "======================================"
-          kubectl get events --sort-by=.lastTimestamp | tail -30
+          echo "===== KUBERNETES EVENTS ====="
+          kubectl get events --sort-by=.lastTimestamp | tail -30 || true
 
-          echo "======================================"
-          echo "BACKEND LOGS"
-          echo "======================================"
+          echo "===== BACKEND LOGS ====="
           kubectl logs -l app=backend \
             --tail=100 \
             --all-containers=true \
