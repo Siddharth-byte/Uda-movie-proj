@@ -3,7 +3,7 @@ name: Backend Continuous Deployment
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - 'starter/backend/**'
 
@@ -27,6 +27,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('starter/backend/Pipfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install Pipenv
         run: pip install pipenv
@@ -55,6 +63,14 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('starter/backend/Pipfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install Pipenv
         run: pip install pipenv
 
@@ -74,10 +90,8 @@ jobs:
       - test
 
     steps:
-
       - name: Checkout code
         uses: actions/checkout@v4
-
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -87,11 +101,9 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
 
-
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-
 
       - name: Build backend Docker image
         working-directory: starter/backend
@@ -104,7 +116,6 @@ jobs:
             --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
             .
 
-
       - name: Push backend image to ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -113,13 +124,11 @@ jobs:
         run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-
       - name: Configure kubectl
         run: |
           aws eks update-kubeconfig \
             --region ${{ secrets.AWS_REGION }} \
             --name ${{ secrets.EKS_CLUSTER_NAME }}
-
 
       - name: Deploy backend to EKS
         working-directory: starter/backend/k8s
@@ -130,33 +139,6 @@ jobs:
           kustomize edit set image backend=$ECR_REGISTRY/backend:$IMAGE_TAG
           kustomize build | kubectl apply -f -
 
-
       - name: Verify backend deployment
-        continue-on-error: true
         run: |
           kubectl rollout status deployment/backend --timeout=180s
-
-
-      - name: Show backend deployment status
-        if: always()
-        run: |
-          echo "===== BACKEND DEPLOYMENT ====="
-          kubectl get deployment backend -o wide || true
-
-          echo "===== BACKEND REPLICASETS ====="
-          kubectl get replicasets -l app=backend -o wide || true
-
-          echo "===== BACKEND PODS ====="
-          kubectl get pods -l app=backend -o wide || true
-
-          echo "===== BACKEND SERVICES ====="
-          kubectl get services -l app=backend || true
-
-          echo "===== KUBERNETES EVENTS ====="
-          kubectl get events --sort-by=.lastTimestamp | tail -30 || true
-
-          echo "===== BACKEND LOGS ====="
-          kubectl logs -l app=backend \
-            --tail=100 \
-            --all-containers=true \
-            --ignore-errors=true || true
