@@ -128,49 +128,26 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           kustomize edit set image backend=$ECR_REGISTRY/backend:$IMAGE_TAG
+
+          echo "=== Applying backend Kubernetes manifests ==="
           kustomize build | kubectl apply -f -
 
-
-      - name: Check backend deployment
-        run: |
-          echo "=== Deployment ==="
+          echo "=== Backend deployment ==="
           kubectl get deployment backend -o wide
 
-          echo "=== ReplicaSets ==="
-          kubectl get replicasets -l app=backend -o wide
-
-          echo "=== Pods ==="
+          echo "=== Backend pods ==="
           kubectl get pods -l app=backend -o wide
 
 
-      - name: Remove stuck old backend pods
+      - name: Wait for old backend pods to terminate
         run: |
-          echo "Checking for old backend pods..."
+          echo "Waiting for old backend pods to terminate..."
 
-          CURRENT_HASH=$(kubectl get replicasets -l app=backend \
-            --sort-by=.metadata.creationTimestamp \
-            -o jsonpath='{.items[-1].metadata.labels.pod-template-hash}')
-
-          echo "Current pod-template-hash: $CURRENT_HASH"
-
-          OLD_PODS=$(kubectl get pods -l app=backend \
-            -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.labels.pod-template-hash}{"\n"}{end}' \
-            | awk -v current="$CURRENT_HASH" '$2 != current {print $1}')
-
-          if [ -n "$OLD_PODS" ]; then
-            echo "Old pods found:"
-            echo "$OLD_PODS"
-
-            for POD in $OLD_PODS; do
-              echo "Force deleting old pod: $POD"
-              kubectl delete pod "$POD" \
-                --grace-period=0 \
-                --force \
-                --ignore-not-found=true
-            done
-          else
-            echo "No stuck old pods found."
-          fi
+          kubectl wait \
+            --for=delete \
+            pod \
+            -l app=backend \
+            --timeout=60s || true
 
 
       - name: Wait for backend deployment
@@ -178,17 +155,38 @@ jobs:
           kubectl rollout status deployment/backend --timeout=180s
 
 
-      - name: Final backend status
+      - name: Final backend verification
         if: always()
         run: |
-          echo "=== Final Deployment ==="
+          echo "======================================"
+          echo "BACKEND DEPLOYMENT"
+          echo "======================================"
           kubectl get deployment backend -o wide
 
-          echo "=== Final Pods ==="
+          echo "======================================"
+          echo "BACKEND REPLICASETS"
+          echo "======================================"
+          kubectl get replicasets -l app=backend -o wide
+
+          echo "======================================"
+          echo "BACKEND PODS"
+          echo "======================================"
           kubectl get pods -l app=backend -o wide
 
-          echo "=== Recent Events ==="
+          echo "======================================"
+          echo "BACKEND SERVICES"
+          echo "======================================"
+          kubectl get services -l app=backend
+
+          echo "======================================"
+          echo "RECENT EVENTS"
+          echo "======================================"
           kubectl get events --sort-by=.lastTimestamp | tail -30
 
-          echo "=== Backend Logs ==="
-          kubectl logs -l app=backend --tail=100 --all-containers=true --ignore-errors=true || true
+          echo "======================================"
+          echo "BACKEND LOGS"
+          echo "======================================"
+          kubectl logs -l app=backend \
+            --tail=100 \
+            --all-containers=true \
+            --ignore-errors=true || true
