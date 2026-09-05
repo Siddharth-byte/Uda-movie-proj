@@ -36,7 +36,6 @@ jobs:
       - name: Run lint
         run: npm run lint
 
-
   test:
     name: Frontend Tests
     runs-on: ubuntu-latest
@@ -46,9 +45,6 @@ jobs:
         working-directory: starter/frontend
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -64,7 +60,6 @@ jobs:
 
       - name: Run tests
         run: npm test -- --watchAll=false --passWithNoTests
-
 
   build-and-deploy:
     name: Build and Deploy Frontend
