@@ -411,7 +411,13 @@ frontend ci url: https://github.com/Siddharth-byte/Uda-movie-proj/actions/runs/3
 backend ci url: https://github.com/Siddharth-byte/Uda-movie-proj/actions/runs/33984486218
 frontend cd url:https://github.com/Siddharth-byte/Uda-movie-proj/actions/runs/33989490437
 backend cd url: https://github.com/Siddharth-byte/Uda-movie-proj/actions/runs/33989486158
-backend url:a6260e48d56f444168bb5590fdec33ef-1495598070.***.elb.amazonaws.com
+## Deployed Application URLs
+
+### Frontend
+http://ae1d1ee7731c94e9897024d815294b59-120858638.us-east-1.elb.amazonaws.com/
+
+### Backend API
+http://a6260e48d56f444168bb5590fdec33ef-1495598070.us-east-1.elb.amazonaws.com/movies
 ## License
 
 [License](LICENSE.md)
