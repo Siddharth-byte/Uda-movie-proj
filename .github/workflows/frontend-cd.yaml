@@ -156,7 +156,25 @@ jobs:
 
       - name: Verify frontend deployment
         run: |
-          kubectl rollout status deployment/frontend --timeout=180s
+         if ! kubectl rollout status deployment/frontend --timeout=180s; then
+         echo "===== FRONTEND DEPLOYMENT ====="
+         kubectl get deployment frontend -o wide
+
+         echo "===== FRONTEND PODS ====="
+         kubectl get pods -l app=frontend -o wide
+
+          echo "===== FRONTEND POD DESCRIBE ====="
+          POD=$(kubectl get pods -l app=frontend -o jsonpath='{.items[0].metadata.name}')
+          kubectl describe pod "$POD"
+
+          echo "===== FRONTEND POD LOGS ====="
+          kubectl logs "$POD" --all-containers=true --tail=200 || true
+
+          echo "===== FRONTEND PREVIOUS LOGS ====="
+          kubectl logs "$POD" --all-containers=true --previous --tail=200 || true
+
+         exit 1
+         fi
 
       - name: Show frontend service
         run: |
