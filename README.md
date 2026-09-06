@@ -406,7 +406,12 @@ kustomize edit set image backend=<ECR_REPO_URL>:<NEW_TAG_HERE>
 # Apply the manifests to the cluster
 kustomize build | kubectl apply -f -
 ```
-
+## Links 
+frontend ci url: https://github.com/Siddharth-byte/Uda-movie-proj/actions/runs/33982813043           
+backend ci url: https://github.com/Siddharth-byte/Uda-movie-proj/actions/runs/33984486218
+frontend cd url:https://github.com/Siddharth-byte/Uda-movie-proj/actions/runs/33989490437
+backend cd url: https://github.com/Siddharth-byte/Uda-movie-proj/actions/runs/33989486158
+backend url:a6260e48d56f444168bb5590fdec33ef-1495598070.***.elb.amazonaws.com
 ## License
 
 [License](LICENSE.md)
