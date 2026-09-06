@@ -6,6 +6,8 @@ metadata:
     app: frontend
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: frontend
@@ -14,6 +16,7 @@ spec:
       labels:
         app: frontend
     spec:
+      terminationGracePeriodSeconds: 0
       containers:
         - name: frontend
           image: frontend
